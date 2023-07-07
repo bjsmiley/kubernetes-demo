@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: weatherapi-service
+spec:
+  selector:
+    app: weatherapi-app
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: api-port
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weatherapi-deployment
+  labels:
+    app: weatherapi-app
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: weatherapi-app
+  template:
+    metadata:
+      labels:
+        app: weatherapi-app
+    spec:
+      containers:
+      - name: weatherapi
+        image: docker.io/bjsmiley/weatherapi
+        ports:
+        - name: api-port
+          containerPort: 8080
+        startupProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /api/startup
+            port: api-port
+          initialDelaySeconds: 2
+          failureThreshold: 10
+          periodSeconds: 3
+        readinessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /api/readiness
+            port: api-port
+          failureThreshold: 2
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /api/liveness
+            port: api-port
+          failureThreshold: 1
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        env:
+        - name: STARTUP_DELAY
+          value: "20"
+        - name: ASPNETCORE_URLS
+          value: "https://*:8080"
+        - name: ASPNETCORE_Kestrel__Certificates__Default__Path
+          value: /app/cert.pfx
+        - name: ASPNETCORE_Kestrel__Certificates__Default__Password
+          value: supersecretpazzword123
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: weatherapi-pdb
+spec:
+  # weatherapi-deployment 
+  # has 5 replicas
+  minAvailable: 4
+  selector:
+    matchLabels:
+      app: weatherapi-app
